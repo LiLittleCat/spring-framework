@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2020 the original author or authors.
+ * Copyright 2002-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -475,7 +475,6 @@ public class CorsConfiguration {
 	 * @return the combined {@code CorsConfiguration}, or {@code this}
 	 * configuration if the supplied configuration is {@code null}
 	 */
-	@Nullable
 	public CorsConfiguration combine(@Nullable CorsConfiguration other) {
 		if (other == null) {
 			return this;
@@ -551,6 +550,9 @@ public class CorsConfiguration {
 	public String checkOrigin(@Nullable String requestOrigin) {
 		if (!StringUtils.hasText(requestOrigin)) {
 			return null;
+		}
+		if (requestOrigin.endsWith("/")) {
+			requestOrigin = requestOrigin.substring(0, requestOrigin.length() - 1);
 		}
 		if (!ObjectUtils.isEmpty(this.allowedOrigins)) {
 			if (this.allowedOrigins.contains(ALL)) {

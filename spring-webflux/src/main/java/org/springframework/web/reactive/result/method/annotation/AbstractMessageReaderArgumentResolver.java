@@ -17,11 +17,11 @@
 package org.springframework.web.reactive.result.method.annotation;
 
 import java.lang.annotation.Annotation;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -31,7 +31,6 @@ import org.springframework.core.MethodParameter;
 import org.springframework.core.ReactiveAdapter;
 import org.springframework.core.ReactiveAdapterRegistry;
 import org.springframework.core.ResolvableType;
-import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.core.codec.DecodingException;
 import org.springframework.core.codec.Hints;
 import org.springframework.core.io.buffer.DataBuffer;
@@ -45,7 +44,7 @@ import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.validation.Validator;
-import org.springframework.validation.annotation.Validated;
+import org.springframework.validation.annotation.ValidationAnnotationUtils;
 import org.springframework.web.bind.support.WebExchangeBindException;
 import org.springframework.web.bind.support.WebExchangeDataBinder;
 import org.springframework.web.reactive.BindingContext;
@@ -76,8 +75,6 @@ public abstract class AbstractMessageReaderArgumentResolver extends HandlerMetho
 
 	private final List<HttpMessageReader<?>> messageReaders;
 
-	private final List<MediaType> supportedMediaTypes;
-
 
 	/**
 	 * Constructor with {@link HttpMessageReader}'s and a {@link Validator}.
@@ -99,9 +96,6 @@ public abstract class AbstractMessageReaderArgumentResolver extends HandlerMetho
 		Assert.notEmpty(messageReaders, "At least one HttpMessageReader is required");
 		Assert.notNull(adapterRegistry, "ReactiveAdapterRegistry is required");
 		this.messageReaders = messageReaders;
-		this.supportedMediaTypes = messageReaders.stream()
-				.flatMap(converter -> converter.getReadableMediaTypes().stream())
-				.collect(Collectors.toList());
 	}
 
 
@@ -212,8 +206,9 @@ public abstract class AbstractMessageReaderArgumentResolver extends HandlerMetho
 		if (contentType == null && method != null && SUPPORTED_METHODS.contains(method)) {
 			Flux<DataBuffer> body = request.getBody().doOnNext(buffer -> {
 				DataBufferUtils.release(buffer);
-				// Body not empty, back to 415..
-				throw new UnsupportedMediaTypeStatusException(mediaType, this.supportedMediaTypes, elementType);
+				// Body not empty, back toy 415..
+				throw new UnsupportedMediaTypeStatusException(
+						mediaType, getSupportedMediaTypes(elementType), elementType);
 			});
 			if (isBodyRequired) {
 				body = body.switchIfEmpty(Mono.error(() -> handleMissingBody(bodyParam)));
@@ -221,7 +216,8 @@ public abstract class AbstractMessageReaderArgumentResolver extends HandlerMetho
 			return (adapter != null ? Mono.just(adapter.fromPublisher(body)) : Mono.from(body));
 		}
 
-		return Mono.error(new UnsupportedMediaTypeStatusException(mediaType, this.supportedMediaTypes, elementType));
+		return Mono.error(new UnsupportedMediaTypeStatusException(
+				mediaType, getSupportedMediaTypes(elementType), elementType));
 	}
 
 	private Throwable handleReadError(MethodParameter parameter, Throwable ex) {
@@ -243,10 +239,9 @@ public abstract class AbstractMessageReaderArgumentResolver extends HandlerMetho
 	private Object[] extractValidationHints(MethodParameter parameter) {
 		Annotation[] annotations = parameter.getParameterAnnotations();
 		for (Annotation ann : annotations) {
-			Validated validatedAnn = AnnotationUtils.getAnnotation(ann, Validated.class);
-			if (validatedAnn != null || ann.annotationType().getSimpleName().startsWith("Valid")) {
-				Object hints = (validatedAnn != null ? validatedAnn.value() : AnnotationUtils.getValue(ann));
-				return (hints instanceof Object[] ? (Object[]) hints : new Object[] {hints});
+			Object[] hints = ValidationAnnotationUtils.determineValidationHints(ann);
+			if (hints != null) {
+				return hints;
 			}
 		}
 		return null;
@@ -261,6 +256,14 @@ public abstract class AbstractMessageReaderArgumentResolver extends HandlerMetho
 		if (binder.getBindingResult().hasErrors()) {
 			throw new WebExchangeBindException(param, binder.getBindingResult());
 		}
+	}
+
+	private List<MediaType> getSupportedMediaTypes(ResolvableType elementType) {
+		List<MediaType> mediaTypes = new ArrayList<>();
+		for (HttpMessageReader<?> reader : this.messageReaders) {
+			mediaTypes.addAll(reader.getReadableMediaTypes(elementType));
+		}
+		return mediaTypes;
 	}
 
 }

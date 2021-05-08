@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2020 the original author or authors.
+ * Copyright 2002-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1241,6 +1241,51 @@ class CronExpressionTests {
 		assertThat(actual).isNotNull();
 		assertThat(actual).isEqualTo(expected);
 	}
+
+	@Test
+	public void sundayToFriday() {
+		CronExpression expression = CronExpression.parse("0 0 0 ? * SUN-FRI");
+
+		LocalDateTime last = LocalDateTime.of(2021, 2, 25, 15, 0);
+		LocalDateTime expected = LocalDateTime.of(2021, 2, 26, 0, 0);
+		LocalDateTime actual = expression.next(last);
+		assertThat(actual).isNotNull();
+		assertThat(actual).isEqualTo(expected);
+		assertThat(actual.getDayOfWeek()).isEqualTo(FRIDAY);
+
+		last = actual;
+		expected = LocalDateTime.of(2021, 2, 28, 0, 0);
+		actual = expression.next(last);
+		assertThat(actual).isNotNull();
+		assertThat(actual).isEqualTo(expected);
+		assertThat(actual.getDayOfWeek()).isEqualTo(SUNDAY);
+	}
+
+	@Test
+	public void daylightSaving() {
+		CronExpression cronExpression = CronExpression.parse("0 0 9 * * *");
+
+		ZonedDateTime last = ZonedDateTime.parse("2021-03-27T09:00:00+01:00[Europe/Amsterdam]");
+		ZonedDateTime expected = ZonedDateTime.parse("2021-03-28T09:00:00+02:00[Europe/Amsterdam]");
+		ZonedDateTime actual = cronExpression.next(last);
+		assertThat(actual).isNotNull();
+		assertThat(actual).isEqualTo(expected);
+
+		last = ZonedDateTime.parse("2021-10-30T09:00:00+02:00[Europe/Amsterdam]");
+		expected = ZonedDateTime.parse("2021-10-31T09:00:00+01:00[Europe/Amsterdam]");
+		actual = cronExpression.next(last);
+		assertThat(actual).isNotNull();
+		assertThat(actual).isEqualTo(expected);
+
+		cronExpression = CronExpression.parse("0 10 2 * * *");
+
+		last = ZonedDateTime.parse("2013-03-31T01:09:00+01:00[Europe/Amsterdam]");
+		expected = ZonedDateTime.parse("2013-04-01T02:10:00+02:00[Europe/Amsterdam]");
+		actual = cronExpression.next(last);
+		assertThat(actual).isNotNull();
+		assertThat(actual).isEqualTo(expected);
+	}
+
 
 
 }
